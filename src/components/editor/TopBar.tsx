@@ -6,7 +6,7 @@ import { useEditor, SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/editor-store";
 import { SlideCanvas } from "./SlideCanvas";
 import { createRoot } from "react-dom/client";
 
-export function TopBar() {
+export function TopBar({ compact = false }: { compact?: boolean }) {
   const title = useEditor((s) => s.title);
   const setTitle = useEditor((s) => s.setTitle);
   const slides = useEditor((s) => s.slides);
@@ -109,8 +109,24 @@ export function TopBar() {
     renderAll();
   };
 
+  if (compact) {
+    return (
+      <header className="flex h-12 items-center gap-2 border-b bg-background px-3 md:hidden">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md brand-gradient text-white">
+          <Sparkles className="h-3.5 w-3.5" />
+        </div>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm font-medium outline-none focus:border-ring focus:bg-background"
+          aria-label="Título da apresentação"
+        />
+      </header>
+    );
+  }
+
   return (
-    <header className="flex h-14 items-center gap-3 border-b bg-background px-4">
+    <header className="hidden h-14 items-center gap-3 border-b bg-background px-4 md:flex">
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg brand-gradient text-white">
           <Sparkles className="h-4 w-4" />

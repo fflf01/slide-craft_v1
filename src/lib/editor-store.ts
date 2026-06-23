@@ -64,6 +64,7 @@ interface EditorState {
   slides: Slide[];
   currentSlideId: string;
   selectedId: string | null;
+  editingTextId: string | null;
   title: string;
 
   setTitle: (t: string) => void;
@@ -75,6 +76,7 @@ interface EditorState {
   moveSlide: (id: string, dir: -1 | 1) => void;
 
   select: (id: string | null) => void;
+  setEditingTextId: (id: string | null) => void;
   addElement: (el: Omit<SlideElement, "id">) => void;
   updateElement: (id: string, patch: Partial<SlideElement>) => void;
   removeElement: (id: string) => void;
@@ -162,14 +164,15 @@ export const useEditor = create<EditorState>((set, get) => ({
   slides: initialPresentation.slides,
   currentSlideId: initialPresentation.currentSlideId,
   selectedId: null,
+  editingTextId: null,
   title: initialPresentation.title,
 
   setTitle: (t) => set({ title: t }),
   hydratePresentation: (snapshot) => {
     const next = normalizeSnapshot(snapshot);
-    set({ ...next, selectedId: null });
+    set({ ...next, selectedId: null, editingTextId: null });
   },
-  setCurrentSlide: (id) => set({ currentSlideId: id, selectedId: null }),
+  setCurrentSlide: (id) => set({ currentSlideId: id, selectedId: null, editingTextId: null }),
 
   addSlide: () => {
     const s = makeSlide();
@@ -207,7 +210,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ slides: next });
   },
 
-  select: (id) => set({ selectedId: id }),
+  select: (id) => set({ selectedId: id, editingTextId: null }),
+  setEditingTextId: (id) => set({ editingTextId: id }),
   addElement: (el) => {
     const id = nanoid(8);
     set((st) => ({

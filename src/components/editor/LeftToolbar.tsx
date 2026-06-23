@@ -101,7 +101,12 @@ const TEMPLATES = [
   },
 ] as const;
 
-export function LeftToolbar() {
+type LeftToolbarProps = {
+  /** Apenas o painel de conteúdo (para drawer mobile). */
+  contentOnly?: boolean;
+};
+
+export function LeftToolbar({ contentOnly = false }: LeftToolbarProps) {
   const [tab, setTab] = useState<(typeof TOOLS)[number]["id"]>("design");
   const [imgUrl, setImgUrl] = useState("");
   const add = useEditor((s) => s.addElement);
@@ -178,30 +183,31 @@ export function LeftToolbar() {
     tpl.el.forEach((e) => st.addElement({ ...e } as NewElement));
   };
 
-  return (
-    <div className="flex h-full">
-      <div className="flex w-20 flex-col items-center gap-1 border-r bg-panel py-3">
-        {TOOLS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex w-16 flex-col items-center gap-1 rounded-lg py-2 text-[11px] transition-colors ${
-                active
-                  ? "bg-foreground/5 text-foreground"
-                  : "text-muted-foreground hover:bg-foreground/5"
-              }`}
-            >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="w-72 overflow-y-auto border-r bg-background p-4">
+  const panelContent = (
+      <div className={contentOnly ? "w-full" : "w-72 overflow-y-auto border-r bg-background p-4"}>
+        {contentOnly && (
+          <div className="mb-4 flex gap-1 overflow-x-auto pb-1">
+            {TOOLS.map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-colors touch-manipulation ${
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-foreground/5 text-muted-foreground"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" strokeWidth={active ? 2.4 : 1.8} />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {tab === "design" && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold">Templates</h3>
@@ -401,6 +407,33 @@ export function LeftToolbar() {
           </div>
         )}
       </div>
+  );
+
+  if (contentOnly) return panelContent;
+
+  return (
+    <div className="hidden h-full md:flex">
+      <div className="flex w-20 flex-col items-center gap-1 border-r bg-panel py-3">
+        {TOOLS.map((t) => {
+          const Icon = t.icon;
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex w-16 flex-col items-center gap-1 rounded-lg py-2 text-[11px] transition-colors ${
+                active
+                  ? "bg-foreground/5 text-foreground"
+                  : "text-muted-foreground hover:bg-foreground/5"
+              }`}
+            >
+              <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      {panelContent}
     </div>
   );
 }

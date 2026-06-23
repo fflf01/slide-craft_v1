@@ -17,10 +17,11 @@ const COLORS = [
   "#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#ec4899", "#facc15",
 ];
 
-export function PropertiesBar() {
+export function PropertiesBar({ variant = "bar" }: { variant?: "bar" | "sheet" }) {
   const slide = useEditor(currentSlide);
   const selectedId = useEditor((s) => s.selectedId);
   const update = useEditor((s) => s.updateElement);
+  const setEditingTextId = useEditor((s) => s.setEditingTextId);
   const remove = useEditor((s) => s.removeElement);
   const bringForward = useEditor((s) => s.bringForward);
   const sendBackward = useEditor((s) => s.sendBackward);
@@ -29,8 +30,15 @@ export function PropertiesBar() {
   const el = slide.elements.find((e) => e.id === selectedId);
 
   if (!el) {
+    if (variant === "sheet") {
+      return (
+        <p className="py-4 text-sm text-muted-foreground">
+          Toque em um elemento no slide para editar fonte, cor, opacidade e camadas.
+        </p>
+      );
+    }
     return (
-      <div className="flex h-12 items-center justify-between border-b bg-background px-4 text-xs text-muted-foreground">
+      <div className="hidden h-12 items-center justify-between border-b bg-background px-4 text-xs text-muted-foreground md:flex">
         <span>Selecione um elemento para editar suas propriedades — duplo clique no texto para editar.</span>
         <span className="text-[11px]">⌫ apagar · ←→↑↓ mover · Shift+seta 10px</span>
       </div>
@@ -43,10 +51,27 @@ export function PropertiesBar() {
     add({ ...(rest as Omit<SlideElement, "id">), x: el.x + 20, y: el.y + 20 });
   };
 
+  const isSheet = variant === "sheet";
+
   return (
-    <div className="flex h-12 items-center gap-2 border-b bg-background px-3 text-sm">
+    <div
+      className={
+        isSheet
+          ? "flex flex-col gap-4 py-2 text-sm"
+          : "hidden h-12 items-center gap-2 border-b bg-background px-3 text-sm md:flex"
+      }
+    >
       {el.type === "text" && (
-        <>
+        <div className={isSheet ? "flex flex-wrap gap-2" : "contents"}>
+          {isSheet && (
+            <button
+              type="button"
+              onClick={() => setEditingTextId(el.id)}
+              className="mb-1 w-full rounded-lg border bg-card px-4 py-2.5 text-sm font-medium touch-manipulation hover:bg-foreground/5"
+            >
+              Editar texto
+            </button>
+          )}
           <select
             value={el.fontFamily}
             onChange={(e) => update(el.id, { fontFamily: e.target.value })}
@@ -112,16 +137,18 @@ export function PropertiesBar() {
             label="Cor"
             value={el.color}
             onChange={(c) => update(el.id, { color: c })}
+            expanded={isSheet}
           />
-        </>
+        </div>
       )}
 
       {(el.type === "rect" || el.type === "ellipse") && (
-        <>
+        <div className={isSheet ? "flex flex-wrap items-center gap-2" : "contents"}>
           <ColorPicker
             label="Preenchimento"
             value={el.fill}
             onChange={(c) => update(el.id, { fill: c })}
+            expanded={isSheet}
           />
           {el.type === "rect" && (
             <>
@@ -137,11 +164,11 @@ export function PropertiesBar() {
               />
             </>
           )}
-        </>
+        </div>
       )}
 
       {el.type === "image" && (
-        <>
+        <div className={isSheet ? "flex flex-wrap items-center gap-2" : "contents"}>
           <span className="text-xs text-muted-foreground">Cantos</span>
           <input
             type="range"
@@ -151,10 +178,11 @@ export function PropertiesBar() {
             onChange={(e) => update(el.id, { radius: Number(e.target.value) })}
             className="h-1 w-28 accent-[color:var(--brand)]"
           />
-        </>
+        </div>
       )}
 
-      <Divider />
+      <div className={isSheet ? "flex flex-wrap items-center gap-2 border-t pt-3" : "contents"}>
+      {!isSheet && <Divider />}
       <span className="text-xs text-muted-foreground">Opacidade</span>
       <input
         type="range"
@@ -166,7 +194,7 @@ export function PropertiesBar() {
         className="h-1 w-24 accent-[color:var(--brand)]"
       />
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className={isSheet ? "flex flex-wrap gap-2 pt-2" : "ml-auto flex items-center gap-1"}>
         <IconBtn onClick={() => bringForward(el.id)} title="Trazer para frente">
           <ChevronUp className="h-4 w-4" />
         </IconBtn>
@@ -179,6 +207,7 @@ export function PropertiesBar() {
         <IconBtn onClick={() => remove(el.id)} title="Excluir">
           <Trash2 className="h-4 w-4 text-destructive" />
         </IconBtn>
+      </div>
       </div>
     </div>
   );
@@ -238,8 +267,36 @@ function NumberStepper({
 }
 
 function ColorPicker({
-  label, value, onChange,
-}: { label: string; value: string; onChange: (c: string) => void }) {
+  label, value, onChange, expanded = false,
+}: { label: string; value: string; onChange: (c: string) => void; expanded?: boolean }) {
+  if (expanded) {
+    return (
+      <div className="w-full space-y-2">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <div className="grid grid-cols-6 gap-2">
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => onChange(c)}
+              className={`h-9 w-9 rounded-lg border-2 touch-manipulation ${
+                value === c ? "border-foreground" : "border-border"
+              }`}
+              style={{ background: c }}
+              aria-label={c}
+            />
+          ))}
+        </div>
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-10 w-full cursor-pointer rounded border bg-transparent"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="group relative">
       <button

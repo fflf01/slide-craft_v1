@@ -120,3 +120,22 @@
   background-image: radial-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px);
   background-size: 18px 18px;
 }
+
+/* Mobile usability kit */
+@layer utilities {
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+  .h-dvh {
+    height: 100dvh;
+  }
+  .overscroll-contain {
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 767px) {
+  .canvas-shadow {
+    box-shadow: 0 4px 20px -6px rgba(15, 23, 42, 0.15);
+  }
+}

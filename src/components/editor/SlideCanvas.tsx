@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   SLIDE_HEIGHT,
   SLIDE_WIDTH,
@@ -23,6 +23,9 @@ export function SlideCanvas({ slide, scale, interactive = true, canvasId }: Prop
       id={canvasId}
       onMouseDown={(e) => {
         if (interactive && e.target === e.currentTarget) select(null);
+      }}
+      onPointerDown={(e) => {
+        if (interactive && e.target === e.currentTarget && e.pointerType === "touch") select(null);
       }}
       style={{
         width: SLIDE_WIDTH * scale,
@@ -66,9 +69,11 @@ function ElementView({
   interactive: boolean;
 }) {
   const select = useEditor((s) => s.select);
+  const setEditingTextId = useEditor((s) => s.setEditingTextId);
+  const editingTextId = useEditor((s) => s.editingTextId);
   const update = useEditor((s) => s.updateElement);
   const remove = useEditor((s) => s.removeElement);
-  const [editing, setEditing] = useState(false);
+  const editing = editingTextId === el.id;
   const dragRef = useRef<{ x: number; y: number; ex: number; ey: number } | null>(null);
   const resizeRef = useRef<{
     handle: string;
@@ -76,17 +81,20 @@ function ElementView({
     y: number;
     el: SlideElement;
   } | null>(null);
+  const lastTapRef = useRef(0);
+  const movedRef = useRef(false);
 
   useEffect(() => {
-    if (!selected) setEditing(false);
-  }, [selected]);
+    if (!selected) setEditingTextId(null);
+  }, [selected, setEditingTextId]);
 
   useEffect(() => {
     if (!interactive) return;
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: MouseEvent | PointerEvent) => {
       if (dragRef.current) {
         const dx = e.clientX - dragRef.current.x;
         const dy = e.clientY - dragRef.current.y;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) movedRef.current = true;
         update(el.id, {
           x: dragRef.current.ex + dx,
           y: dragRef.current.ey + dy,
@@ -116,29 +124,45 @@ function ElementView({
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
   }, [interactive, el, update]);
 
-  // Find scale by walking up - use closest parent transformed div
-  const startDrag = (e: React.MouseEvent) => {
+  const startDrag = (clientX: number, clientY: number) => {
     if (!interactive || editing) return;
-    e.stopPropagation();
     select(el.id);
     dragRef.current = {
-      x: e.clientX,
-      y: e.clientY,
+      x: clientX,
+      y: clientY,
       ex: el.x,
       ey: el.y,
     };
+    movedRef.current = false;
   };
 
-  const startResize = (handle: string) => (e: React.MouseEvent) => {
+  const onPointerDownDrag = (e: React.PointerEvent) => {
+    if (!interactive || editing) return;
     e.stopPropagation();
-    e.preventDefault();
-    resizeRef.current = { handle, x: e.clientX, y: e.clientY, el };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    startDrag(e.clientX, e.clientY);
+  };
+
+  const onMouseDownDrag = (e: React.MouseEvent) => {
+    if (!interactive || editing) return;
+    e.stopPropagation();
+    startDrag(e.clientX, e.clientY);
+  };
+
+  const startResize = (handle: string) => (clientX: number, clientY: number) => {
+    resizeRef.current = { handle, x: clientX, y: clientY, el };
     document.body.style.cursor =
       handle === "n" || handle === "s"
         ? "ns-resize"
@@ -147,6 +171,30 @@ function ElementView({
           : handle === "nw" || handle === "se"
             ? "nwse-resize"
             : "nesw-resize";
+  };
+
+  const onResizePointer = (handle: string) => (e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    startResize(handle)(e.clientX, e.clientY);
+  };
+
+  const onResizeMouse = (handle: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    startResize(handle)(e.clientX, e.clientY);
+  };
+
+  const onTextActivate = () => {
+    if (el.type !== "text" || movedRef.current) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < 350) {
+      setEditingTextId(el.id);
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
   };
 
   useEffect(() => {
@@ -183,6 +231,7 @@ function ElementView({
     opacity: el.opacity,
     cursor: interactive ? (editing ? "text" : "move") : "default",
     userSelect: editing ? "text" : "none",
+    touchAction: interactive && !editing ? "none" : "auto",
   };
 
   let content: React.ReactNode = null;
@@ -192,7 +241,7 @@ function ElementView({
         autoFocus
         value={el.text}
         onChange={(e) => update(el.id, { text: e.target.value })}
-        onBlur={() => setEditing(false)}
+        onBlur={() => setEditingTextId(null)}
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           width: "100%",
@@ -279,13 +328,15 @@ function ElementView({
   return (
     <div
       style={baseStyle}
-      onMouseDown={startDrag}
+      onMouseDown={onMouseDownDrag}
+      onPointerDown={onPointerDownDrag}
       onDoubleClick={(e) => {
         if (el.type === "text") {
           e.stopPropagation();
-          setEditing(true);
+          setEditingTextId(el.id);
         }
       }}
+      onPointerUp={onTextActivate}
     >
       {content}
       {selected && interactive && (
@@ -300,7 +351,7 @@ function ElementView({
             }}
           />
           {handles.map((h) => {
-            const size = 14;
+            const size = 18;
             const pos: React.CSSProperties = { position: "absolute", width: size, height: size };
             if (h.includes("n")) pos.top = -size / 2;
             if (h.includes("s")) pos.bottom = -size / 2;
@@ -325,7 +376,8 @@ function ElementView({
             return (
               <div
                 key={h}
-                onMouseDown={startResize(h)}
+                onMouseDown={onResizeMouse(h)}
+                onPointerDown={onResizePointer(h)}
                 style={{
                   ...pos,
                   cursor,
@@ -333,6 +385,7 @@ function ElementView({
                   border: "2px solid var(--brand)",
                   borderRadius: 3,
                   zIndex: 10,
+                  touchAction: "none",
                 }}
               />
             );

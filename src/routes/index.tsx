@@ -9,10 +9,7 @@ import {
   type PresentationSnapshot,
 } from "@/lib/editor-store";
 import { SlideCanvas } from "@/components/editor/SlideCanvas";
-import { SlidesPanel } from "@/components/editor/SlidesPanel";
-import { LeftToolbar } from "@/components/editor/LeftToolbar";
-import { PropertiesBar } from "@/components/editor/PropertiesBar";
-import { TopBar } from "@/components/editor/TopBar";
+import { EditorShell } from "@/components/mobile/EditorShell";
 
 const CLIENT_ID_KEY = "canvify:client-id";
 const PRESENTATION_CACHE_KEY = "canvify:presentation:v1";
@@ -144,7 +141,8 @@ function Editor() {
     const compute = () => {
       const el = containerRef.current;
       if (!el) return;
-      const padding = 64;
+      const isMobile = window.innerWidth < 768;
+      const padding = isMobile ? 24 : 64;
       const w = el.clientWidth - padding;
       const h = el.clientHeight - padding;
       const s = Math.min(w / SLIDE_WIDTH, h / SLIDE_HEIGHT, 1);
@@ -166,26 +164,16 @@ function Editor() {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <TopBar />
-      <div className="flex flex-1 overflow-hidden">
-        <LeftToolbar />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <PropertiesBar />
-          <div
-            ref={containerRef}
-            className="dotted-bg flex flex-1 items-center justify-center overflow-auto bg-canvas-bg"
-          >
-            <SlideCanvas slide={slide} scale={scale} canvasId="main-canvas" />
-          </div>
-          <div className="flex h-8 items-center justify-end gap-2 border-t bg-background px-4 text-xs text-muted-foreground">
-            <span>{Math.round(scale * 100)}%</span>
-            <span>·</span>
-            <span>{SLIDE_WIDTH} × {SLIDE_HEIGHT}</span>
-          </div>
-        </div>
-        <SlidesPanel />
-      </div>
-    </div>
+    <EditorShell
+      containerRef={containerRef}
+      canvas={<SlideCanvas slide={slide} scale={scale} canvasId="main-canvas" />}
+      scaleLabel={
+        <>
+          <span>{Math.round(scale * 100)}%</span>
+          <span>·</span>
+          <span>{SLIDE_WIDTH} × {SLIDE_HEIGHT}</span>
+        </>
+      }
+    />
   );
 }

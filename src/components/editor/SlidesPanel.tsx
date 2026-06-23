@@ -14,7 +14,7 @@ export function SlidesPanel() {
   const removeSlide = useEditor((s) => s.removeSlide);
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r bg-panel">
+    <aside className="hidden w-56 shrink-0 flex-col border-r bg-panel md:flex">
       <div className="flex items-center justify-between px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
         <span>Páginas</span>
         <span className="text-foreground/70">{slides.length}</span>
