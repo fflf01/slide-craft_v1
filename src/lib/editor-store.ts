@@ -51,6 +51,12 @@ export interface Slide {
   elements: SlideElement[];
 }
 
+export interface PresentationSnapshot {
+  slides: Slide[];
+  currentSlideId: string;
+  title: string;
+}
+
 export const SLIDE_WIDTH = 1280;
 export const SLIDE_HEIGHT = 720;
 
@@ -61,6 +67,7 @@ interface EditorState {
   title: string;
 
   setTitle: (t: string) => void;
+  hydratePresentation: (snapshot: PresentationSnapshot) => void;
   setCurrentSlide: (id: string) => void;
   addSlide: () => void;
   duplicateSlide: (id: string) => void;
@@ -82,51 +89,86 @@ const makeSlide = (): Slide => ({
   elements: [],
 });
 
-const firstSlide = makeSlide();
-firstSlide.elements.push({
-  id: nanoid(8),
-  type: "text",
-  x: 120,
-  y: 220,
-  width: 1040,
-  height: 140,
-  rotation: 0,
-  opacity: 1,
-  text: "Clique para editar",
-  fontSize: 96,
-  fontFamily: "Inter",
-  fontWeight: 800,
-  fontStyle: "normal",
-  textAlign: "center",
-  color: "#0f172a",
-  underline: false,
-});
-firstSlide.elements.push({
-  id: nanoid(8),
-  type: "text",
-  x: 120,
-  y: 380,
-  width: 1040,
-  height: 60,
-  rotation: 0,
-  opacity: 1,
-  text: "Um clone do Canva feito com amor",
-  fontSize: 32,
-  fontFamily: "Inter",
-  fontWeight: 400,
-  fontStyle: "normal",
-  textAlign: "center",
-  color: "#475569",
-  underline: false,
+const createInitialPresentation = (): PresentationSnapshot => {
+  const firstSlide = makeSlide();
+  firstSlide.elements.push({
+    id: nanoid(8),
+    type: "text",
+    x: 120,
+    y: 220,
+    width: 1040,
+    height: 140,
+    rotation: 0,
+    opacity: 1,
+    text: "Clique para editar",
+    fontSize: 96,
+    fontFamily: "Inter",
+    fontWeight: 800,
+    fontStyle: "normal",
+    textAlign: "center",
+    color: "#0f172a",
+    underline: false,
+  });
+  firstSlide.elements.push({
+    id: nanoid(8),
+    type: "text",
+    x: 120,
+    y: 380,
+    width: 1040,
+    height: 60,
+    rotation: 0,
+    opacity: 1,
+    text: "Um clone do Canva feito com amor",
+    fontSize: 32,
+    fontFamily: "Inter",
+    fontWeight: 400,
+    fontStyle: "normal",
+    textAlign: "center",
+    color: "#475569",
+    underline: false,
+  });
+
+  return {
+    slides: [firstSlide],
+    currentSlideId: firstSlide.id,
+    title: "Apresentação sem título",
+  };
+};
+
+const initialPresentation = createInitialPresentation();
+
+const normalizeSnapshot = (snapshot: PresentationSnapshot): PresentationSnapshot => {
+  const slides = snapshot.slides.length > 0 ? snapshot.slides : initialPresentation.slides;
+  const hasCurrentSlide = slides.some((slide) => slide.id === snapshot.currentSlideId);
+
+  return {
+    slides,
+    currentSlideId: hasCurrentSlide ? snapshot.currentSlideId : slides[0].id,
+    title: snapshot.title || "Apresentação sem título",
+  };
+};
+
+export const toPresentationSnapshot = (state: {
+  slides: Slide[];
+  currentSlideId: string;
+  title: string;
+}): PresentationSnapshot => ({
+  slides: state.slides,
+  currentSlideId: state.currentSlideId,
+  title: state.title,
 });
 
 export const useEditor = create<EditorState>((set, get) => ({
-  slides: [firstSlide],
-  currentSlideId: firstSlide.id,
+  slides: initialPresentation.slides,
+  currentSlideId: initialPresentation.currentSlideId,
   selectedId: null,
-  title: "Apresentação sem título",
+  title: initialPresentation.title,
 
   setTitle: (t) => set({ title: t }),
+  hydratePresentation: (snapshot) => {
+    const next = normalizeSnapshot(snapshot);
+    set({ ...next, selectedId: null });
+  },
   setCurrentSlide: (id) => set({ currentSlideId: id, selectedId: null }),
 
   addSlide: () => {
