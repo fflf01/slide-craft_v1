@@ -1,11 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { currentSlide, SLIDE_HEIGHT, SLIDE_WIDTH, useEditor } from "@/lib/editor-store";
+import {
+  currentSlide,
+  SLIDE_HEIGHT,
+  SLIDE_WIDTH,
+  toPresentationSnapshot,
+  useEditor,
+  type PresentationSnapshot,
+} from "@/lib/editor-store";
 import { SlideCanvas } from "@/components/editor/SlideCanvas";
 import { SlidesPanel } from "@/components/editor/SlidesPanel";
 import { LeftToolbar } from "@/components/editor/LeftToolbar";
 import { PropertiesBar } from "@/components/editor/PropertiesBar";
 import { TopBar } from "@/components/editor/TopBar";
+
+const CLIENT_ID_KEY = "canvify:client-id";
+const PRESENTATION_CACHE_KEY = "canvify:presentation:v1";
+const SAVE_DEBOUNCE_MS = 600;
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -19,10 +30,115 @@ export const Route = createFileRoute("/")({
   component: Editor,
 });
 
+function getClientId() {
+  try {
+    const saved = window.localStorage.getItem(CLIENT_ID_KEY);
+    if (saved) return saved;
+
+    const next = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    window.localStorage.setItem(CLIENT_ID_KEY, next);
+    return next;
+  } catch {
+    return "anonymous";
+  }
+}
+
+function isPresentationSnapshot(value: unknown): value is PresentationSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const snapshot = value as Partial<PresentationSnapshot>;
+  return (
+    typeof snapshot.title === "string" &&
+    typeof snapshot.currentSlideId === "string" &&
+    Array.isArray(snapshot.slides)
+  );
+}
+
+function readBrowserCache() {
+  try {
+    const raw = window.localStorage.getItem(PRESENTATION_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return isPresentationSnapshot(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeBrowserCache(snapshot: PresentationSnapshot) {
+  try {
+    window.localStorage.setItem(PRESENTATION_CACHE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Ignore storage quota/private-mode failures. The SQLite API remains the source of truth.
+  }
+}
+
+async function fetchSavedPresentation(clientId: string) {
+  const response = await fetch(`/api/presentation?clientId=${encodeURIComponent(clientId)}`);
+  if (!response.ok) return null;
+
+  const body = await response.json();
+  return isPresentationSnapshot(body.presentation) ? body.presentation : null;
+}
+
+async function persistPresentation(clientId: string, presentation: PresentationSnapshot) {
+  await fetch("/api/presentation", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ clientId, presentation }),
+  });
+}
+
 function Editor() {
   const slide = useEditor(currentSlide);
+  const hydratePresentation = useEditor((state) => state.hydratePresentation);
   const containerRef = useRef<HTMLDivElement>(null);
+  const clientIdRef = useRef<string | null>(null);
+  const readyToSaveRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
   const [scale, setScale] = useState(0.6);
+
+  useEffect(() => {
+    let cancelled = false;
+    const clientId = getClientId();
+    clientIdRef.current = clientId;
+
+    const cached = readBrowserCache();
+    if (cached) hydratePresentation(cached);
+
+    fetchSavedPresentation(clientId)
+      .then((saved) => {
+        if (!cancelled && saved) hydratePresentation(saved);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) readyToSaveRef.current = true;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydratePresentation]);
+
+  useEffect(() => {
+    const unsubscribe = useEditor.subscribe((state) => {
+      if (!readyToSaveRef.current || !clientIdRef.current) return;
+
+      const snapshot = toPresentationSnapshot(state);
+      writeBrowserCache(snapshot);
+
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => {
+        if (!clientIdRef.current) return;
+        persistPresentation(clientIdRef.current, snapshot).catch(() => undefined);
+      }, SAVE_DEBOUNCE_MS);
+    });
+
+    return () => {
+      unsubscribe();
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const compute = () => {
