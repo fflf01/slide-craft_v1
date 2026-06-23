@@ -8,6 +8,12 @@ type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
+type Presentation = {
+  title: string;
+  currentSlideId: string;
+  slides: unknown[];
+};
+
 type PresentationPayload = {
   clientId?: unknown;
   presentation?: unknown;
@@ -34,9 +40,9 @@ function json(data: unknown, init?: ResponseInit) {
   });
 }
 
-function isPresentation(value: unknown) {
+function isPresentation(value: unknown): value is Presentation {
   if (!value || typeof value !== "object") return false;
-  const candidate = value as { title?: unknown; currentSlideId?: unknown; slides?: unknown };
+  const candidate = value as Partial<Presentation>;
   return (
     typeof candidate.title === "string" &&
     typeof candidate.currentSlideId === "string" &&
