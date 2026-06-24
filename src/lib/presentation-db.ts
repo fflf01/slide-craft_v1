@@ -1,11 +1,4 @@
-import { createClient, type Client } from "@libsql/client";
-
-const DB_URL =
-  process.env.LIBSQL_DATABASE_URL ??
-  process.env.TURSO_DATABASE_URL ??
-  "file:/tmp/canvify.sqlite";
-
-const DB_AUTH_TOKEN = process.env.LIBSQL_AUTH_TOKEN ?? process.env.TURSO_AUTH_TOKEN;
+import { ensureDbSchema, getDb } from "./db";
 
 type PresentationSnapshot = {
   title: string;
@@ -13,45 +6,12 @@ type PresentationSnapshot = {
   slides: unknown[];
 };
 
-let client: Client | undefined;
-let schemaPromise: Promise<void> | undefined;
+export async function getPresentation(ownerKey: string) {
+  await ensureDbSchema();
 
-function getClient() {
-  if (!client) {
-    client = createClient({
-      url: DB_URL,
-      authToken: DB_AUTH_TOKEN,
-    });
-  }
-
-  return client;
-}
-
-async function ensureSchema() {
-  if (!schemaPromise) {
-    schemaPromise = getClient()
-      .execute({
-        sql: `
-          CREATE TABLE IF NOT EXISTS presentations (
-            client_id TEXT PRIMARY KEY,
-            data TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-          )
-        `,
-        args: [],
-      })
-      .then(() => undefined);
-  }
-
-  return schemaPromise;
-}
-
-export async function getPresentation(clientId: string) {
-  await ensureSchema();
-
-  const result = await getClient().execute({
+  const result = await getDb().execute({
     sql: "SELECT data FROM presentations WHERE client_id = ? LIMIT 1",
-    args: [clientId],
+    args: [ownerKey],
   });
 
   const data = result.rows[0]?.data;
@@ -60,10 +20,10 @@ export async function getPresentation(clientId: string) {
   return JSON.parse(data) as PresentationSnapshot;
 }
 
-export async function savePresentation(clientId: string, presentation: PresentationSnapshot) {
-  await ensureSchema();
+export async function savePresentation(ownerKey: string, presentation: PresentationSnapshot) {
+  await ensureDbSchema();
 
-  await getClient().execute({
+  await getDb().execute({
     sql: `
       INSERT INTO presentations (client_id, data, updated_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
@@ -71,6 +31,24 @@ export async function savePresentation(clientId: string, presentation: Presentat
         data = excluded.data,
         updated_at = CURRENT_TIMESTAMP
     `,
-    args: [clientId, JSON.stringify(presentation)],
+    args: [ownerKey, JSON.stringify(presentation)],
   });
+}
+
+export async function deletePresentation(ownerKey: string) {
+  await ensureDbSchema();
+  await getDb().execute({
+    sql: "DELETE FROM presentations WHERE client_id = ?",
+    args: [ownerKey],
+  });
+}
+
+/** @deprecated use getPresentation(ownerKey) */
+export async function getPresentationByClientId(clientId: string) {
+  return getPresentation(clientId);
+}
+
+/** @deprecated use savePresentation(ownerKey) */
+export async function savePresentationByClientId(clientId: string, presentation: PresentationSnapshot) {
+  return savePresentation(clientId, presentation);
 }

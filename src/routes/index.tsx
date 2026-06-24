@@ -8,11 +8,10 @@ import {
   useEditor,
   type PresentationSnapshot,
 } from "@/lib/editor-store";
+import { useAuth } from "@/hooks/use-auth";
 import { SlideCanvas } from "@/components/editor/SlideCanvas";
 import { EditorShell } from "@/components/mobile/EditorShell";
 
-const CLIENT_ID_KEY = "canvify:client-id";
-const PRESENTATION_CACHE_KEY = "canvify:presentation:v1";
 const SAVE_DEBOUNCE_MS = 600;
 
 export const Route = createFileRoute("/")({
@@ -27,17 +26,8 @@ export const Route = createFileRoute("/")({
   component: Editor,
 });
 
-function getClientId() {
-  try {
-    const saved = window.localStorage.getItem(CLIENT_ID_KEY);
-    if (saved) return saved;
-
-    const next = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-    window.localStorage.setItem(CLIENT_ID_KEY, next);
-    return next;
-  } catch {
-    return "anonymous";
-  }
+function cacheKeyForSession(sessionId: string) {
+  return `canvify:presentation:session:${sessionId}`;
 }
 
 function isPresentationSnapshot(value: unknown): value is PresentationSnapshot {
@@ -50,9 +40,10 @@ function isPresentationSnapshot(value: unknown): value is PresentationSnapshot {
   );
 }
 
-function readBrowserCache() {
+function readBrowserCache(sessionId: string) {
+  if (!sessionId) return null;
   try {
-    const raw = window.localStorage.getItem(PRESENTATION_CACHE_KEY);
+    const raw = window.localStorage.getItem(cacheKeyForSession(sessionId));
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
@@ -62,48 +53,53 @@ function readBrowserCache() {
   }
 }
 
-function writeBrowserCache(snapshot: PresentationSnapshot) {
+function writeBrowserCache(sessionId: string, snapshot: PresentationSnapshot) {
+  if (!sessionId) return;
   try {
-    window.localStorage.setItem(PRESENTATION_CACHE_KEY, JSON.stringify(snapshot));
+    window.localStorage.setItem(cacheKeyForSession(sessionId), JSON.stringify(snapshot));
   } catch {
-    // Ignore storage quota/private-mode failures. The SQLite API remains the source of truth.
+    // Ignore storage quota/private-mode failures.
   }
 }
 
-async function fetchSavedPresentation(clientId: string) {
-  const response = await fetch(`/api/presentation?clientId=${encodeURIComponent(clientId)}`);
+async function fetchSavedPresentation() {
+  const response = await fetch("/api/presentation", { credentials: "include" });
   if (!response.ok) return null;
 
   const body = await response.json();
   return isPresentationSnapshot(body.presentation) ? body.presentation : null;
 }
 
-async function persistPresentation(clientId: string, presentation: PresentationSnapshot) {
+async function persistPresentation(presentation: PresentationSnapshot) {
   await fetch("/api/presentation", {
     method: "PUT",
+    credentials: "include",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ clientId, presentation }),
+    body: JSON.stringify({ presentation }),
   });
 }
 
 function Editor() {
   const slide = useEditor(currentSlide);
   const hydratePresentation = useEditor((state) => state.hydratePresentation);
+  const { user, sessionId, isLoading: authLoading } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
-  const clientIdRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const readyToSaveRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
   const [scale, setScale] = useState(0.6);
 
   useEffect(() => {
-    let cancelled = false;
-    const clientId = getClientId();
-    clientIdRef.current = clientId;
+    if (authLoading || !sessionId) return;
 
-    const cached = readBrowserCache();
+    let cancelled = false;
+    readyToSaveRef.current = false;
+    sessionIdRef.current = sessionId;
+
+    const cached = readBrowserCache(sessionId);
     if (cached) hydratePresentation(cached);
 
-    fetchSavedPresentation(clientId)
+    fetchSavedPresentation()
       .then((saved) => {
         if (!cancelled && saved) hydratePresentation(saved);
       })
@@ -115,19 +111,18 @@ function Editor() {
     return () => {
       cancelled = true;
     };
-  }, [hydratePresentation]);
+  }, [authLoading, sessionId, hydratePresentation]);
 
   useEffect(() => {
     const unsubscribe = useEditor.subscribe((state) => {
-      if (!readyToSaveRef.current || !clientIdRef.current) return;
+      if (!readyToSaveRef.current || authLoading || !sessionIdRef.current) return;
 
       const snapshot = toPresentationSnapshot(state);
-      writeBrowserCache(snapshot);
+      writeBrowserCache(sessionIdRef.current, snapshot);
 
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = window.setTimeout(() => {
-        if (!clientIdRef.current) return;
-        persistPresentation(clientIdRef.current, snapshot).catch(() => undefined);
+        persistPresentation(snapshot).catch(() => undefined);
       }, SAVE_DEBOUNCE_MS);
     });
 
@@ -135,7 +130,7 @@ function Editor() {
       unsubscribe();
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
-  }, []);
+  }, [authLoading, sessionId]);
 
   useLayoutEffect(() => {
     const compute = () => {
@@ -154,7 +149,6 @@ function Editor() {
     return () => ro.disconnect();
   }, []);
 
-  // Prevent browser scroll on space when presenting via keyboard
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === " " && (e.target as HTMLElement)?.tagName === "BODY") e.preventDefault();
@@ -162,6 +156,8 @@ function Editor() {
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
+
+  const ownerLabel = user ? user.email : "Convidado";
 
   return (
     <EditorShell
@@ -172,6 +168,8 @@ function Editor() {
           <span>{Math.round(scale * 100)}%</span>
           <span>·</span>
           <span>{SLIDE_WIDTH} × {SLIDE_HEIGHT}</span>
+          <span>·</span>
+          <span className="max-w-[120px] truncate">{ownerLabel}</span>
         </>
       }
     />

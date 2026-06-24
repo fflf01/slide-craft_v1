@@ -1,6 +1,7 @@
 import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
+import { handleAuthApi, presentationKeyForSession, resolveActiveSession } from "./lib/auth-api";
 import { renderErrorPage } from "./lib/error-page";
 import { getPresentation, savePresentation } from "./lib/presentation-db";
 
@@ -15,7 +16,6 @@ type Presentation = {
 };
 
 type PresentationPayload = {
-  clientId?: unknown;
   presentation?: unknown;
 };
 
@@ -31,13 +31,9 @@ async function getServerEntry(): Promise<ServerEntry> {
 }
 
 function json(data: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      ...init?.headers,
-    },
-  });
+  const headers = new Headers(init?.headers);
+  headers.set("content-type", "application/json; charset=utf-8");
+  return new Response(JSON.stringify(data), { ...init, headers });
 }
 
 function isPresentation(value: unknown): value is Presentation {
@@ -54,32 +50,32 @@ async function handlePresentationApi(request: Request) {
   const url = new URL(request.url);
   if (url.pathname !== "/api/presentation") return null;
 
-  if (request.method === "GET") {
-    const clientId = url.searchParams.get("clientId")?.trim();
-    if (!clientId) return json({ error: "clientId is required" }, { status: 400 });
+  const session = await resolveActiveSession(request);
+  const ownerKey = presentationKeyForSession(session.sessionId);
+  const extraHeaders = new Headers();
+  for (const cookie of session.setCookies) {
+    extraHeaders.append("set-cookie", cookie);
+  }
 
-    const presentation = await getPresentation(clientId);
-    return json({ presentation });
+  if (request.method === "GET") {
+    const presentation = await getPresentation(ownerKey);
+    return json({ presentation, sessionId: session.sessionId }, { headers: extraHeaders });
   }
 
   if (request.method === "PUT" || request.method === "POST") {
     const payload = (await request.json()) as PresentationPayload;
-    const clientId = typeof payload.clientId === "string" ? payload.clientId.trim() : "";
 
-    if (!clientId) return json({ error: "clientId is required" }, { status: 400 });
     if (!isPresentation(payload.presentation)) {
-      return json({ error: "presentation payload is invalid" }, { status: 400 });
+      return json({ error: "presentation payload is invalid" }, { status: 400, headers: extraHeaders });
     }
 
-    await savePresentation(clientId, payload.presentation);
-    return json({ ok: true });
+    await savePresentation(ownerKey, payload.presentation);
+    return json({ ok: true, sessionId: session.sessionId }, { headers: extraHeaders });
   }
 
-  return json({ error: "Method not allowed" }, { status: 405, headers: { allow: "GET, PUT, POST" } });
+  return json({ error: "Method not allowed" }, { status: 405, headers: { allow: "GET, PUT, POST", ...extraHeaders } });
 }
 
-// h3 swallows in-handler throws into a normal 500 Response with body
-// {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
 async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
   if (response.status < 500) return response;
   const contentType = response.headers.get("content-type") ?? "";
@@ -100,6 +96,9 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const authResponse = await handleAuthApi(request);
+      if (authResponse) return authResponse;
+
       const apiResponse = await handlePresentationApi(request);
       if (apiResponse) return apiResponse;
 

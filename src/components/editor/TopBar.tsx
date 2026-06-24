@@ -1,44 +1,17 @@
 import { Download, Play, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
 import { useEditor, SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/editor-store";
-import { SlideCanvas } from "./SlideCanvas";
-import { createRoot } from "react-dom/client";
+import { AuthMenu } from "@/components/auth/AuthMenu";
+import { useSlidePresent } from "@/hooks/use-slide-present";
 
 export function TopBar({ compact = false }: { compact?: boolean }) {
   const title = useEditor((s) => s.title);
   const setTitle = useEditor((s) => s.setTitle);
   const slides = useEditor((s) => s.slides);
+  const { present, renderSlideOffscreen } = useSlidePresent();
   const [busy, setBusy] = useState<null | "png" | "pdf">(null);
   const [menu, setMenu] = useState(false);
-
-  const renderSlideOffscreen = async (slideIdx: number): Promise<string> => {
-    const host = document.createElement("div");
-    host.style.position = "fixed";
-    host.style.left = "-99999px";
-    host.style.top = "0";
-    host.style.width = SLIDE_WIDTH + "px";
-    host.style.height = SLIDE_HEIGHT + "px";
-    document.body.appendChild(host);
-    const root = createRoot(host);
-    await new Promise<void>((res) => {
-      root.render(<SlideCanvas slide={slides[slideIdx]} scale={1} interactive={false} />);
-      requestAnimationFrame(() => requestAnimationFrame(() => res()));
-    });
-    // Allow images to settle
-    await new Promise((r) => setTimeout(r, 250));
-    const dataUrl = await toPng(host.firstElementChild as HTMLElement, {
-      width: SLIDE_WIDTH,
-      height: SLIDE_HEIGHT,
-      pixelRatio: 1.5,
-      cacheBust: true,
-      skipFonts: false,
-    });
-    root.unmount();
-    host.remove();
-    return dataUrl;
-  };
 
   const exportPng = async () => {
     setBusy("png");
@@ -76,39 +49,6 @@ export function TopBar({ compact = false }: { compact?: boolean }) {
     }
   };
 
-  const present = () => {
-    const w = window.open("", "_blank", "width=1280,height=720");
-    if (!w) return;
-    w.document.title = title;
-    w.document.body.style.margin = "0";
-    w.document.body.style.background = "#000";
-    const renderAll = async () => {
-      const dataUrls: string[] = [];
-      for (let i = 0; i < slides.length; i++) {
-        dataUrls.push(await renderSlideOffscreen(i));
-      }
-      let idx = 0;
-      const img = w.document.createElement("img");
-      img.style.width = "100vw";
-      img.style.height = "100vh";
-      img.style.objectFit = "contain";
-      img.src = dataUrls[0];
-      w.document.body.appendChild(img);
-      w.document.addEventListener("keydown", (ev) => {
-        if (ev.key === "ArrowRight" || ev.key === " ") {
-          idx = Math.min(dataUrls.length - 1, idx + 1);
-          img.src = dataUrls[idx];
-        }
-        if (ev.key === "ArrowLeft") {
-          idx = Math.max(0, idx - 1);
-          img.src = dataUrls[idx];
-        }
-        if (ev.key === "Escape") w.close();
-      });
-    };
-    renderAll();
-  };
-
   if (compact) {
     return (
       <header className="flex h-12 items-center gap-2 border-b bg-background px-3 md:hidden">
@@ -121,6 +61,18 @@ export function TopBar({ compact = false }: { compact?: boolean }) {
           className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm font-medium outline-none focus:border-ring focus:bg-background"
           aria-label="Título da apresentação"
         />
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => present()}
+            className="flex h-9 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-foreground/80 hover:bg-foreground/5"
+            title="Apresentar"
+          >
+            <Play className="h-4 w-4" />
+            <span className="hidden xs:inline sm:inline">Apresentar</span>
+          </button>
+          <AuthMenu compact />
+        </div>
       </header>
     );
   }
@@ -144,12 +96,15 @@ export function TopBar({ compact = false }: { compact?: boolean }) {
 
       <div className="ml-auto flex items-center gap-2">
         <button
-          onClick={present}
+          type="button"
+          onClick={() => present()}
           className="flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-foreground/80 hover:bg-foreground/5"
         >
           <Play className="h-4 w-4" />
           Apresentar
         </button>
+
+        <AuthMenu toolbar />
 
         <div className="relative">
           <button
