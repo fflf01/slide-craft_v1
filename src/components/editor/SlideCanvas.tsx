@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   SLIDE_HEIGHT,
@@ -7,11 +7,7 @@ import {
   type Slide,
   useEditor,
 } from "@/lib/editor-store";
-import {
-  applyMagicWandToImage,
-  pickImageElementAt,
-  slideCoordsFromPointer,
-} from "@/lib/magic-wand";
+import { pickImageElementAt, slideCoordsFromPointer } from "@/lib/magic-wand";
 
 interface Props {
   slide: Slide;
@@ -23,17 +19,15 @@ interface Props {
 export function SlideCanvas({ slide, scale, interactive = true, canvasId }: Props) {
   const selectedId = useEditor((s) => s.selectedId);
   const activeTool = useEditor((s) => s.activeTool);
-  const wandTolerance = useEditor((s) => s.wandTolerance);
   const select = useEditor((s) => s.select);
-  const updateElement = useEditor((s) => s.updateElement);
+  const openImageEditor = useEditor((s) => s.openImageEditor);
   const innerRef = useRef<HTMLDivElement>(null);
-  const [wandBusy, setWandBusy] = useState(false);
 
   const elementInteractive = interactive && activeTool === "select";
 
-  const runMagicWand = async (clientX: number, clientY: number) => {
+  const openEditorWithWand = (clientX: number, clientY: number) => {
     const inner = innerRef.current;
-    if (!inner || wandBusy) return;
+    if (!inner) return;
 
     const rect = inner.getBoundingClientRect();
     const { x, y } = slideCoordsFromPointer(clientX, clientY, rect, SLIDE_WIDTH, SLIDE_HEIGHT);
@@ -41,31 +35,13 @@ export function SlideCanvas({ slide, scale, interactive = true, canvasId }: Prop
 
     if (!hit) {
       toast.message("Varinha mágica", {
-        description: "Clique em uma imagem para remover a cor semelhante.",
+        description: "Clique em uma imagem para abrir o editor e selecionar áreas por cor.",
       });
       return;
     }
 
-    const imageEl = slide.elements.find((e) => e.id === hit.id);
-    if (!imageEl || imageEl.type !== "image") return;
-
-    setWandBusy(true);
-    try {
-      const newSrc = await applyMagicWandToImage(
-        imageEl.src,
-        x - imageEl.x,
-        y - imageEl.y,
-        imageEl.width,
-        imageEl.height,
-        wandTolerance,
-      );
-      updateElement(imageEl.id, { src: newSrc });
-      select(imageEl.id);
-    } catch {
-      toast.error("Não foi possível aplicar a varinha mágica. Verifique se a imagem permite edição (CORS).");
-    } finally {
-      setWandBusy(false);
-    }
+    openImageEditor(hit.id, { x: x - hit.x, y: y - hit.y });
+    select(hit.id);
   };
 
   const onCanvasPointerDown = (e: React.PointerEvent) => {
@@ -75,7 +51,7 @@ export function SlideCanvas({ slide, scale, interactive = true, canvasId }: Prop
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
-      runMagicWand(e.clientX, e.clientY).catch(() => undefined);
+      openEditorWithWand(e.clientX, e.clientY);
       return;
     }
 
@@ -99,12 +75,7 @@ export function SlideCanvas({ slide, scale, interactive = true, canvasId }: Prop
     return () => window.removeEventListener("keydown", onKey);
   }, [interactive, activeTool]);
 
-  const canvasCursor =
-    activeTool === "magic-wand"
-      ? wandBusy
-        ? "wait"
-        : "crosshair"
-      : undefined;
+  const canvasCursor = activeTool === "magic-wand" ? "crosshair" : undefined;
 
   return (
     <div
@@ -156,6 +127,7 @@ function ElementView({
   interactive: boolean;
 }) {
   const select = useEditor((s) => s.select);
+  const openImageEditor = useEditor((s) => s.openImageEditor);
   const setEditingTextId = useEditor((s) => s.setEditingTextId);
   const editingTextId = useEditor((s) => s.editingTextId);
   const update = useEditor((s) => s.updateElement);
@@ -422,6 +394,10 @@ function ElementView({
         if (el.type === "text") {
           e.stopPropagation();
           setEditingTextId(el.id);
+        }
+        if (el.type === "image" && interactive) {
+          e.stopPropagation();
+          openImageEditor(el.id);
         }
       }}
       onPointerUp={onTextActivate}

@@ -11,6 +11,7 @@ import { MobilePanelDrawer } from "@/components/mobile/MobilePanelDrawer";
 import { MobileSlidesStrip } from "@/components/mobile/MobileSlidesStrip";
 import { MobileSharePanel } from "@/components/mobile/MobileSharePanel";
 import { SlidesPanel } from "@/components/editor/SlidesPanel";
+import { ImageEditorDialog } from "@/components/editor/ImageEditorDialog";
 import {
   safeAreaTopClass,
   type MobilePanel,
@@ -33,6 +34,7 @@ export function EditorShell({ canvas, containerRef, scaleLabel }: Props) {
     return (
       <div className="flex h-screen flex-col overflow-hidden bg-background">
         <TopBar />
+        <ImageEditorDialog />
         <div className="flex flex-1 overflow-hidden">
           <LeftToolbar />
           <CanvasTools />
@@ -56,6 +58,7 @@ export function EditorShell({ canvas, containerRef, scaleLabel }: Props) {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+      <ImageEditorDialog />
       <div className={safeAreaTopClass}>
         <TopBar compact />
         <CanvasTools layout="horizontal" className="md:hidden" />

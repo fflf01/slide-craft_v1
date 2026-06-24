@@ -14,7 +14,7 @@ const TOOLS: { id: CanvasTool; label: string; icon: typeof MousePointer2; hint: 
     id: "magic-wand",
     label: "Varinha mágica",
     icon: Wand2,
-    hint: "Clique em uma imagem para remover a cor selecionada",
+    hint: "Abre o editor e seleciona áreas por cor na imagem",
   },
 ];
 

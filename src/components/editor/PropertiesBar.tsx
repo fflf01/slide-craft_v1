@@ -10,6 +10,7 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { currentSlide, useEditor, type SlideElement } from "@/lib/editor-store";
 
 const COLORS = [
@@ -23,6 +24,7 @@ export function PropertiesBar({ variant = "bar" }: { variant?: "bar" | "sheet" }
   const activeTool = useEditor((s) => s.activeTool);
   const wandTolerance = useEditor((s) => s.wandTolerance);
   const setWandTolerance = useEditor((s) => s.setWandTolerance);
+  const openImageEditor = useEditor((s) => s.openImageEditor);
   const update = useEditor((s) => s.updateElement);
   const setEditingTextId = useEditor((s) => s.setEditingTextId);
   const remove = useEditor((s) => s.removeElement);
@@ -37,7 +39,7 @@ export function PropertiesBar({ variant = "bar" }: { variant?: "bar" | "sheet" }
     const wandPanel = (
       <div className={isSheet ? "space-y-3 py-2" : "flex flex-1 items-center gap-3 px-1"}>
         <span className="text-xs text-muted-foreground">
-          Varinha mágica: clique na cor da imagem que deseja remover. Esc para voltar ao selecionar.
+          Varinha mágica: clique em uma imagem para abrir o editor e selecionar áreas. Duplo clique na imagem também abre o editor.
         </span>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           Tolerância
@@ -197,6 +199,15 @@ export function PropertiesBar({ variant = "bar" }: { variant?: "bar" | "sheet" }
 
       {el.type === "image" && (
         <div className={isSheet ? "flex flex-wrap items-center gap-2" : "contents"}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={isSheet ? "w-full" : "h-8"}
+            onClick={() => openImageEditor(el.id)}
+          >
+            Editar imagem
+          </Button>
           <span className="text-xs text-muted-foreground">Cantos</span>
           <input
             type="range"

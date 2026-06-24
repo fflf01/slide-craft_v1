@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useEditor, type SlideElement } from "@/lib/editor-store";
+import { buildImageElementPayload } from "@/lib/image-versions";
 
 type NewElement = Omit<SlideElement, "id">;
 type NewText = Extract<NewElement, { type: "text" }>;
@@ -161,15 +162,13 @@ export function LeftToolbar({ contentOnly = false }: LeftToolbarProps) {
 
   const addImage = (src: string) =>
     add({
-      type: "image",
+      ...buildImageElementPayload(src, 12),
       x: 340,
       y: 160,
       width: 600,
       height: 400,
       rotation: 0,
       opacity: 1,
-      src,
-      radius: 12,
     } as Extract<NewElement, { type: "image" }>);
 
   const applyTemplate = (tpl: (typeof TEMPLATES)[number]) => {

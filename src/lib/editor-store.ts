@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 
+import type { ImageVersion } from "./image-versions";
+import { ensureImageVersions } from "./image-versions";
+
+export type { ImageVersion };
+
 export type ElementType = "text" | "rect" | "ellipse" | "image";
 
 export interface BaseElement {
@@ -41,6 +46,8 @@ export interface ImageElement extends BaseElement {
   type: "image";
   src: string;
   radius: number;
+  versions?: ImageVersion[];
+  activeVersionId?: string;
 }
 
 export type SlideElement = TextElement | RectElement | EllipseElement | ImageElement;
@@ -62,6 +69,12 @@ export const SLIDE_HEIGHT = 720;
 
 export type CanvasTool = "select" | "magic-wand";
 
+export type ImageEditorSession = {
+  elementId: string;
+  /** Ponto inicial da varinha ao abrir pelo canvas. */
+  wandSeed?: { x: number; y: number };
+};
+
 interface EditorState {
   slides: Slide[];
   currentSlideId: string;
@@ -70,6 +83,7 @@ interface EditorState {
   title: string;
   activeTool: CanvasTool;
   wandTolerance: number;
+  imageEditor: ImageEditorSession | null;
 
   setTitle: (t: string) => void;
   hydratePresentation: (snapshot: PresentationSnapshot) => void;
@@ -81,6 +95,12 @@ interface EditorState {
 
   setActiveTool: (tool: CanvasTool) => void;
   setWandTolerance: (tolerance: number) => void;
+  openImageEditor: (elementId: string, wandSeed?: { x: number; y: number }) => void;
+  closeImageEditor: () => void;
+  commitImageVersions: (
+    elementId: string,
+    payload: { src: string; versions: ImageVersion[]; activeVersionId: string },
+  ) => void;
   select: (id: string | null) => void;
   setEditingTextId: (id: string | null) => void;
   addElement: (el: Omit<SlideElement, "id">) => void;
@@ -174,6 +194,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   title: initialPresentation.title,
   activeTool: "select",
   wandTolerance: 40,
+  imageEditor: null,
 
   setTitle: (t) => set({ title: t }),
   hydratePresentation: (snapshot) => {
@@ -220,6 +241,36 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   setActiveTool: (tool) => set({ activeTool: tool, editingTextId: null }),
   setWandTolerance: (wandTolerance) => set({ wandTolerance }),
+
+  openImageEditor: (elementId, wandSeed) =>
+    set({
+      imageEditor: { elementId, wandSeed },
+      selectedId: elementId,
+      editingTextId: null,
+    }),
+
+  closeImageEditor: () => set({ imageEditor: null }),
+
+  commitImageVersions: (elementId, payload) =>
+    set((st) => ({
+      slides: st.slides.map((s) =>
+        s.id === st.currentSlideId
+          ? {
+              ...s,
+              elements: s.elements.map((e) => {
+                if (e.id !== elementId || e.type !== "image") return e;
+                return ensureImageVersions({
+                  ...e,
+                  src: payload.src,
+                  versions: payload.versions,
+                  activeVersionId: payload.activeVersionId,
+                });
+              }),
+            }
+          : s,
+      ),
+      imageEditor: null,
+    })),
 
   select: (id) => set({ selectedId: id, editingTextId: null }),
   setEditingTextId: (id) => set({ editingTextId: id }),
