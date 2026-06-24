@@ -2,21 +2,37 @@ import { createClient, type Client } from "@libsql/client";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { ensureAdminUser } from "./seed-admin";
+function isServerlessRuntime() {
+  return Boolean(
+    process.env.VERCEL ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.NITRO_PRESET === "vercel",
+  );
+}
 
 function defaultLocalDbUrl() {
+  if (isServerlessRuntime()) {
+    // Vercel/Lambda: /tmp is writable; /var/task is read-only.
+    return "file:/tmp/canvify.sqlite";
+  }
+
   const dir = path.join(process.cwd(), ".data");
   mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, "canvify.sqlite").replace(/\\/g, "/");
   return `file:${filePath}`;
 }
 
-const DB_URL =
-  process.env.LIBSQL_DATABASE_URL ??
-  process.env.TURSO_DATABASE_URL ??
-  defaultLocalDbUrl();
+function resolveDbUrl() {
+  return (
+    process.env.LIBSQL_DATABASE_URL ??
+    process.env.TURSO_DATABASE_URL ??
+    defaultLocalDbUrl()
+  );
+}
 
-const DB_AUTH_TOKEN = process.env.LIBSQL_AUTH_TOKEN ?? process.env.TURSO_AUTH_TOKEN;
+function resolveDbAuthToken() {
+  return process.env.LIBSQL_AUTH_TOKEN ?? process.env.TURSO_AUTH_TOKEN;
+}
 
 let client: Client | undefined;
 let schemaPromise: Promise<void> | undefined;
@@ -24,8 +40,8 @@ let schemaPromise: Promise<void> | undefined;
 export function getDb() {
   if (!client) {
     client = createClient({
-      url: DB_URL,
-      authToken: DB_AUTH_TOKEN,
+      url: resolveDbUrl(),
+      authToken: resolveDbAuthToken(),
     });
   }
   return client;
@@ -33,6 +49,7 @@ export function getDb() {
 
 export async function ensureDbSchema() {
   if (!schemaPromise) {
+    const { ensureAdminUser } = await import("./seed-admin");
     schemaPromise = getDb()
       .batch([
         {
