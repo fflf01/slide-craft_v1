@@ -1,4 +1,4 @@
-import { Download, Play, Sparkles } from "lucide-react";
+import { Download, Play } from "lucide-react";
 import { useState } from "react";
 import jsPDF from "jspdf";
 import { useEditor, SLIDE_WIDTH, SLIDE_HEIGHT } from "@/lib/editor-store";
@@ -52,9 +52,6 @@ export function TopBar({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <header className="flex h-12 items-center gap-2 border-b bg-background px-3 md:hidden">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md brand-gradient text-white">
-          <Sparkles className="h-3.5 w-3.5" />
-        </div>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -79,15 +76,6 @@ export function TopBar({ compact = false }: { compact?: boolean }) {
 
   return (
     <header className="hidden h-14 items-center gap-3 border-b bg-background px-4 md:flex">
-      <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg brand-gradient text-white">
-          <Sparkles className="h-4 w-4" />
-        </div>
-        <span className="brand-gradient-text text-lg font-bold tracking-tight">Canvify</span>
-      </div>
-
-      <div className="mx-4 h-6 w-px bg-border" />
-
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}

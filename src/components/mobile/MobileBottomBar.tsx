@@ -3,7 +3,6 @@ import {
   Layers,
   LayoutGrid,
   Settings2,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -64,16 +63,5 @@ export function MobileBottomBar({ activePanel, onPanelChange, hasSelection }: Pr
         })}
       </div>
     </nav>
-  );
-}
-
-export function MobileBrandMark() {
-  return (
-    <div className="flex items-center gap-1.5 md:hidden">
-      <div className="flex h-7 w-7 items-center justify-center rounded-md brand-gradient text-white">
-        <Sparkles className="h-3.5 w-3.5" />
-      </div>
-      <span className="brand-gradient-text text-sm font-bold tracking-tight">Canvify</span>
-    </div>
   );
 }
