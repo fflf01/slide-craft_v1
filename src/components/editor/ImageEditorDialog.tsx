@@ -40,6 +40,14 @@ import {
 import { currentSlide, useEditor, type ImageElement } from "@/lib/editor-store";
 import { cn } from "@/lib/utils";
 
+function cloneImageData(imageData: ImageData) {
+  return new ImageData(
+    new Uint8ClampedArray(imageData.data),
+    imageData.width,
+    imageData.height,
+  );
+}
+
 export function ImageEditorDialog() {
   const imageEditor = useEditor((s) => s.imageEditor);
   const slide = useEditor(currentSlide);
@@ -50,14 +58,16 @@ export function ImageEditorDialog() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageDataRef = useRef<ImageData | null>(null);
+  const initSessionRef = useRef<string | null>(null);
   const [versions, setVersions] = useState<ImageVersion[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string>("");
   const [selectionMask, setSelectionMask] = useState<Uint8Array | null>(null);
   const [loading, setLoading] = useState(false);
   const [editorTool, setEditorTool] = useState<"select" | "wand">("wand");
 
+  const elementId = imageEditor?.elementId;
   const element = slide.elements.find(
-    (e): e is ImageElement => e.id === imageEditor?.elementId && e.type === "image",
+    (e): e is ImageElement => e.id === elementId && e.type === "image",
   );
 
   const redraw = useCallback(() => {
@@ -78,24 +88,43 @@ export function ImageEditorDialog() {
     }
   }, [selectionMask]);
 
+  const redrawRef = useRef(redraw);
+  redrawRef.current = redraw;
+
   const loadVersionSrc = useCallback(async (src: string, keepSelection = false) => {
     setLoading(true);
     try {
       const { imageData } = await loadImageRaster(src);
-      imageDataRef.current = imageData;
+      imageDataRef.current = cloneImageData(imageData);
       if (!keepSelection) setSelectionMask(null);
-      redraw();
+      redrawRef.current();
     } catch {
       toast.error("Não foi possível carregar esta versão da imagem.");
     } finally {
       setLoading(false);
     }
-  }, [redraw]);
+  }, []);
 
   useEffect(() => {
-    if (!element || !imageEditor) return;
+    if (!imageEditor) {
+      initSessionRef.current = null;
+    }
+  }, [imageEditor]);
 
-    const normalized = ensureImageVersions(element);
+  useEffect(() => {
+    if (!elementId || !imageEditor) return;
+
+    const sessionKey = `${elementId}:${imageEditor.wandSeed?.x ?? "na"}:${imageEditor.wandSeed?.y ?? "na"}`;
+    if (initSessionRef.current === sessionKey) return;
+    initSessionRef.current = sessionKey;
+
+    const slideNow = currentSlide(useEditor.getState());
+    const el = slideNow.elements.find(
+      (e): e is ImageElement => e.id === elementId && e.type === "image",
+    );
+    if (!el) return;
+
+    const normalized = ensureImageVersions(el);
     const active = getActiveImageVersion(normalized);
     const seed = imageEditor.wandSeed;
 
@@ -104,15 +133,37 @@ export function ImageEditorDialog() {
     setSelectionMask(null);
     setEditorTool("wand");
 
-    void loadVersionSrc(active.src).then(() => {
-      if (!seed || !imageDataRef.current) return;
-      const imageData = imageDataRef.current;
-      const px = Math.floor((seed.x / element.width) * imageData.width);
-      const py = Math.floor((seed.y / element.height) * imageData.height);
-      const mask = floodFillSelectionMask(imageData, px, py, useEditor.getState().wandTolerance);
-      setSelectionMask(mask);
-    });
-  }, [element, imageEditor, loadVersionSrc]);
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      try {
+        const { imageData } = await loadImageRaster(active.src);
+        if (cancelled) return;
+        imageDataRef.current = cloneImageData(imageData);
+        redrawRef.current();
+
+        if (seed && !cancelled) {
+          const px = Math.floor((seed.x / el.width) * imageData.width);
+          const py = Math.floor((seed.y / el.height) * imageData.height);
+          const mask = floodFillSelectionMask(
+            imageData,
+            px,
+            py,
+            useEditor.getState().wandTolerance,
+          );
+          setSelectionMask(mask);
+        }
+      } catch {
+        if (!cancelled) toast.error("Não foi possível carregar esta versão da imagem.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [elementId, imageEditor?.wandSeed?.x, imageEditor?.wandSeed?.y, imageEditor]);
 
   const deleteSelection = useCallback(() => {
     const imageData = imageDataRef.current;
@@ -169,7 +220,7 @@ export function ImageEditorDialog() {
   };
 
   const finish = () => {
-    if (!element || !imageDataRef.current) {
+    if (!elementId || !imageDataRef.current) {
       closeImageEditor();
       return;
     }
@@ -180,14 +231,14 @@ export function ImageEditorDialog() {
       nextVersions = versions.map((v) => (v.id === activeVersionId ? { ...v, src } : v));
     }
 
-    commitImageVersions(element.id, {
+    commitImageVersions(elementId, {
       src,
       versions: nextVersions,
       activeVersionId,
     });
   };
 
-  if (!imageEditor || !element) return null;
+  if (!imageEditor || !elementId || !element) return null;
 
   return (
     <Dialog open onOpenChange={(open) => !open && closeImageEditor()}>

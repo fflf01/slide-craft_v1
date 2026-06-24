@@ -1,7 +1,9 @@
 export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    if (/^https?:\/\//i.test(src)) {
+      img.crossOrigin = "anonymous";
+    }
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Não foi possível carregar a imagem."));
     img.src = src;
@@ -134,7 +136,6 @@ export function drawSelectionOverlay(
   mask: Uint8Array,
   width: number,
   height: number,
-  offset = 0,
 ) {
   const overlay = ctx.createImageData(width, height);
   for (let i = 0; i < mask.length; i++) {
@@ -145,7 +146,14 @@ export function drawSelectionOverlay(
     overlay.data[p + 2] = 204;
     overlay.data[p + 3] = 100;
   }
-  ctx.putImageData(overlay, offset, offset);
+
+  const temp = document.createElement("canvas");
+  temp.width = width;
+  temp.height = height;
+  const tempCtx = temp.getContext("2d");
+  if (!tempCtx) return;
+  tempCtx.putImageData(overlay, 0, 0);
+  ctx.drawImage(temp, 0, 0);
 }
 
 export function pointerToImagePixel(
