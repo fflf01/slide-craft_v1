@@ -60,12 +60,16 @@ export interface PresentationSnapshot {
 export const SLIDE_WIDTH = 1280;
 export const SLIDE_HEIGHT = 720;
 
+export type CanvasTool = "select" | "magic-wand";
+
 interface EditorState {
   slides: Slide[];
   currentSlideId: string;
   selectedId: string | null;
   editingTextId: string | null;
   title: string;
+  activeTool: CanvasTool;
+  wandTolerance: number;
 
   setTitle: (t: string) => void;
   hydratePresentation: (snapshot: PresentationSnapshot) => void;
@@ -75,6 +79,8 @@ interface EditorState {
   removeSlide: (id: string) => void;
   moveSlide: (id: string, dir: -1 | 1) => void;
 
+  setActiveTool: (tool: CanvasTool) => void;
+  setWandTolerance: (tolerance: number) => void;
   select: (id: string | null) => void;
   setEditingTextId: (id: string | null) => void;
   addElement: (el: Omit<SlideElement, "id">) => void;
@@ -166,6 +172,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   selectedId: null,
   editingTextId: null,
   title: initialPresentation.title,
+  activeTool: "select",
+  wandTolerance: 40,
 
   setTitle: (t) => set({ title: t }),
   hydratePresentation: (snapshot) => {
@@ -209,6 +217,9 @@ export const useEditor = create<EditorState>((set, get) => ({
     [next[idx], next[target]] = [next[target], next[idx]];
     set({ slides: next });
   },
+
+  setActiveTool: (tool) => set({ activeTool: tool, editingTextId: null }),
+  setWandTolerance: (wandTolerance) => set({ wandTolerance }),
 
   select: (id) => set({ selectedId: id, editingTextId: null }),
   setEditingTextId: (id) => set({ editingTextId: id }),

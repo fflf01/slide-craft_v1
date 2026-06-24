@@ -3,6 +3,7 @@ import type { ReactNode, RefObject } from "react";
 import { useEditor } from "@/lib/editor-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { LeftToolbar } from "@/components/editor/LeftToolbar";
+import { CanvasTools } from "@/components/editor/CanvasTools";
 import { PropertiesBar } from "@/components/editor/PropertiesBar";
 import { TopBar } from "@/components/editor/TopBar";
 import { MobileBottomBar } from "@/components/mobile/MobileBottomBar";
@@ -34,6 +35,7 @@ export function EditorShell({ canvas, containerRef, scaleLabel }: Props) {
         <TopBar />
         <div className="flex flex-1 overflow-hidden">
           <LeftToolbar />
+          <CanvasTools />
           <div className="flex flex-1 flex-col overflow-hidden">
             <PropertiesBar />
             <div
@@ -56,6 +58,7 @@ export function EditorShell({ canvas, containerRef, scaleLabel }: Props) {
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
       <div className={safeAreaTopClass}>
         <TopBar compact />
+        <CanvasTools layout="horizontal" className="md:hidden" />
       </div>
 
       <div

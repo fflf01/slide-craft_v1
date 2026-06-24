@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   SLIDE_HEIGHT,
   SLIDE_WIDTH,
@@ -6,6 +7,11 @@ import {
   type Slide,
   useEditor,
 } from "@/lib/editor-store";
+import {
+  applyMagicWandToImage,
+  pickImageElementAt,
+  slideCoordsFromPointer,
+} from "@/lib/magic-wand";
 
 interface Props {
   slide: Slide;
@@ -16,17 +22,93 @@ interface Props {
 
 export function SlideCanvas({ slide, scale, interactive = true, canvasId }: Props) {
   const selectedId = useEditor((s) => s.selectedId);
+  const activeTool = useEditor((s) => s.activeTool);
+  const wandTolerance = useEditor((s) => s.wandTolerance);
   const select = useEditor((s) => s.select);
+  const updateElement = useEditor((s) => s.updateElement);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [wandBusy, setWandBusy] = useState(false);
+
+  const elementInteractive = interactive && activeTool === "select";
+
+  const runMagicWand = async (clientX: number, clientY: number) => {
+    const inner = innerRef.current;
+    if (!inner || wandBusy) return;
+
+    const rect = inner.getBoundingClientRect();
+    const { x, y } = slideCoordsFromPointer(clientX, clientY, rect, SLIDE_WIDTH, SLIDE_HEIGHT);
+    const hit = pickImageElementAt(slide.elements, x, y);
+
+    if (!hit) {
+      toast.message("Varinha mágica", {
+        description: "Clique em uma imagem para remover a cor semelhante.",
+      });
+      return;
+    }
+
+    const imageEl = slide.elements.find((e) => e.id === hit.id);
+    if (!imageEl || imageEl.type !== "image") return;
+
+    setWandBusy(true);
+    try {
+      const newSrc = await applyMagicWandToImage(
+        imageEl.src,
+        x - imageEl.x,
+        y - imageEl.y,
+        imageEl.width,
+        imageEl.height,
+        wandTolerance,
+      );
+      updateElement(imageEl.id, { src: newSrc });
+      select(imageEl.id);
+    } catch {
+      toast.error("Não foi possível aplicar a varinha mágica. Verifique se a imagem permite edição (CORS).");
+    } finally {
+      setWandBusy(false);
+    }
+  };
+
+  const onCanvasPointerDown = (e: React.PointerEvent) => {
+    if (!interactive) return;
+
+    if (activeTool === "magic-wand") {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      runMagicWand(e.clientX, e.clientY).catch(() => undefined);
+      return;
+    }
+
+    if (e.target === e.currentTarget) select(null);
+  };
+
+  const onCanvasMouseDown = (e: React.MouseEvent) => {
+    if (!interactive || activeTool !== "select") return;
+    if (e.target === e.currentTarget) select(null);
+  };
+
+  useEffect(() => {
+    if (!interactive || activeTool !== "magic-wand") return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        useEditor.getState().setActiveTool("select");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [interactive, activeTool]);
+
+  const canvasCursor =
+    activeTool === "magic-wand"
+      ? wandBusy
+        ? "wait"
+        : "crosshair"
+      : undefined;
 
   return (
     <div
       id={canvasId}
-      onMouseDown={(e) => {
-        if (interactive && e.target === e.currentTarget) select(null);
-      }}
-      onPointerDown={(e) => {
-        if (interactive && e.target === e.currentTarget && e.pointerType === "touch") select(null);
-      }}
       style={{
         width: SLIDE_WIDTH * scale,
         height: SLIDE_HEIGHT * scale,
@@ -34,24 +116,29 @@ export function SlideCanvas({ slide, scale, interactive = true, canvasId }: Prop
         position: "relative",
         overflow: "hidden",
         borderRadius: interactive ? 6 : 4,
+        cursor: interactive ? canvasCursor : undefined,
       }}
       className={interactive ? "canvas-shadow" : "thumb-shadow"}
     >
       <div
+        ref={innerRef}
+        onMouseDown={onCanvasMouseDown}
+        onPointerDown={onCanvasPointerDown}
         style={{
           width: SLIDE_WIDTH,
           height: SLIDE_HEIGHT,
           transform: `scale(${scale})`,
           transformOrigin: "top left",
           position: "relative",
+          pointerEvents: interactive ? "auto" : "none",
         }}
       >
         {slide.elements.map((el) => (
           <ElementView
             key={el.id}
             el={el}
-            selected={interactive && selectedId === el.id}
-            interactive={interactive}
+            selected={elementInteractive && selectedId === el.id}
+            interactive={elementInteractive}
           />
         ))}
       </div>
@@ -232,6 +319,7 @@ function ElementView({
     cursor: interactive ? (editing ? "text" : "move") : "default",
     userSelect: editing ? "text" : "none",
     touchAction: interactive && !editing ? "none" : "auto",
+    pointerEvents: interactive ? "auto" : "none",
   };
 
   let content: React.ReactNode = null;

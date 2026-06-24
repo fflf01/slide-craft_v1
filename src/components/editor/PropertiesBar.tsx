@@ -20,6 +20,9 @@ const COLORS = [
 export function PropertiesBar({ variant = "bar" }: { variant?: "bar" | "sheet" }) {
   const slide = useEditor(currentSlide);
   const selectedId = useEditor((s) => s.selectedId);
+  const activeTool = useEditor((s) => s.activeTool);
+  const wandTolerance = useEditor((s) => s.wandTolerance);
+  const setWandTolerance = useEditor((s) => s.setWandTolerance);
   const update = useEditor((s) => s.updateElement);
   const setEditingTextId = useEditor((s) => s.setEditingTextId);
   const remove = useEditor((s) => s.removeElement);
@@ -27,7 +30,34 @@ export function PropertiesBar({ variant = "bar" }: { variant?: "bar" | "sheet" }
   const sendBackward = useEditor((s) => s.sendBackward);
   const add = useEditor((s) => s.addElement);
 
+  const isSheet = variant === "sheet";
   const el = slide.elements.find((e) => e.id === selectedId);
+
+  if (activeTool === "magic-wand" && !el) {
+    const wandPanel = (
+      <div className={isSheet ? "space-y-3 py-2" : "flex flex-1 items-center gap-3 px-1"}>
+        <span className="text-xs text-muted-foreground">
+          Varinha mágica: clique na cor da imagem que deseja remover. Esc para voltar ao selecionar.
+        </span>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          Tolerância
+          <input
+            type="range"
+            min={5}
+            max={120}
+            value={wandTolerance}
+            onChange={(e) => setWandTolerance(Number(e.target.value))}
+            className="h-1 w-28 accent-[color:var(--brand)]"
+          />
+          <span className="w-8 tabular-nums">{wandTolerance}</span>
+        </label>
+      </div>
+    );
+    if (isSheet) return wandPanel;
+    return (
+      <div className="hidden h-12 items-center border-b bg-background px-4 md:flex">{wandPanel}</div>
+    );
+  }
 
   if (!el) {
     if (variant === "sheet") {
@@ -50,8 +80,6 @@ export function PropertiesBar({ variant = "bar" }: { variant?: "bar" | "sheet" }
     void _id;
     add({ ...(rest as Omit<SlideElement, "id">), x: el.x + 20, y: el.y + 20 });
   };
-
-  const isSheet = variant === "sheet";
 
   return (
     <div
